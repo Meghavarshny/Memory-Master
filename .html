@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Memory Match Game</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        
+        body {
+            background-color: #f5f5f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 600px;
+            width: 100%;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        h1 {
+            color: #2196F3;
+            margin-bottom: 10px;
+            font-size: 2.5rem;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+        
+        .stat-box {
+            background-color: white;
+            padding: 10px 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .restart-btn {
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+            transition: background-color 0.3s;
+        }
+        
+        .restart-btn:hover {
+            background-color: #1976D2;
+        }
+        
+        .game-board {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+            margin-bottom: 30px;
+        }
+        
+        @media (max-width: 500px) {
+            .game-board {
+                grid-template-columns: repeat(3, 1fr);
+            }
+        }
+        
+        .memory-card {
+            aspect-ratio: 1;
+            perspective: 1000px;
+            cursor: pointer;
+            position: relative;
+        }
+        
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transform-style: preserve-3d;
+            transition: transform 0.6s;
+        }
+        
+        .memory-card.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+        
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+        }
+        
+        .card-back {
+            background-color: #2196F3;
+            color: white;
+            font-size: 1.5rem;
+        }
+        
+        .card-front {
+            background-color: white;
+            transform: rotateY(180deg);
+            font-size: 2rem;
+        }
+        
+        .memory-card.matched .card-inner {
+            box-shadow: 0 0 15px rgba(0, 255, 0, 0.7);
+        }
+        
+        .memory-card.error .card-inner {
+            box-shadow: 0 0 15px rgba(255, 0, 0, 0.7);
+            animation: shake 0.5s;
+        }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-5px); }
+            40%, 80% { transform: translateX(5px); }
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0,0,0,0.5);
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        
+        .modal.show {
+            display: flex;
+        }
+        
+        .modal-content {
+            background-color: white;
+            padding: 30px;
+            border-radius: 15px;
+            max-width: 400px;
+            width: 90%;
+            text-align: center;
+        }
+        
+        .modal h2 {
+            color: #2196F3;
+            margin-bottom: 15px;
+        }
+        
+        .modal p {
+            margin-bottom: 20px;
+            font-size: 1.1rem;
+        }
+        
+        .play-again-btn {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Memory Match</h1>
+            <div class="stats">
+                <div class="stat-box">
+                    <span class="label">Moves:</span> 
+                    <span id="moves-counter">0</span>
+                </div>
+                <div class="stat-box">
+                    <span class="label">Pairs:</span> 
+                    <span id="pairs-counter">0</span> / 
+                    <span id="total-pairs">6</span>
+                </div>
+                <div class="stat-box">
+                    <span class="label">Time:</span> 
+                    <span id="timer">00:00</span>
+                </div>
+            </div>
+            <button id="restart-button" class="restart-btn">Restart Game</button>
+        </header>
+        
+        <div id="game-board" class="game-board">
+            <!-- Cards will be dynamically inserted here -->
+        </div>
+        
+        <div id="victory-modal" class="modal">
+            <div class="modal-content">
+                <h2>Congratulations!</h2>
+                <p>You've completed the game in <span id="final-moves">0</span> moves!</p>
+                <p>Time: <span id="final-time">00:00</span></p>
+                <button id="play-again-button" class="play-again-btn">Play Again</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Game state variables
+        let cards = [];
+        let flippedCards = [];
+        let matchedPairs = 0;
+        let moves = 0;
+        let isLocked = false;
+        let isGameComplete = false;
+        let timer = 0;
+        let timerInterval;
+        let isTimerRunning = false;
+        
+        // Card emojis
+        const cardEmojis = ['🐶', '🐱', '🐭', '🐨', '🐯', '🐼'];
+        const totalPairs = cardEmojis.length;
+        
+        // DOM elements
+        const gameBoard = document.getElementById('game-board');
+        const movesCounter = document.getElementById('moves-counter');
+        const pairsCounter = document.getElementById('pairs-counter');
+        const totalPairsDisplay = document.getElementById('total-pairs');
+        const timerDisplay = document.getElementById('timer');
+        const restartButton = document.getElementById('restart-button');
+        const victoryModal = document.getElementById('victory-modal');
+        const finalMovesDisplay = document.getElementById('final-moves');
+        const finalTimeDisplay = document.getElementById('final-time');
+        const playAgainButton = document.getElementById('play-again-button');
+        
+        // Initialize the game
+        function initializeGame() {
+            // Reset game state
+            cards = [];
+            flippedCards = [];
+            matchedPairs = 0;
+            moves = 0;
+            isLocked = false;
+            isGameComplete = false;
+            timer = 0;
+            isTimerRunning = false;
+            clearInterval(timerInterval);
+            
+            // Update UI
+            movesCounter.textContent = moves;
+            pairsCounter.textContent = matchedPairs;
+            totalPairsDisplay.textContent = totalPairs;
+            timerDisplay.textContent = formatTime(timer);
+            victoryModal.classList.remove('show');
+            
+            // Create card pairs
+            cards = createCardPairs();
+            
+            // Render the game board
+            renderGameBoard();
+        }
+        
+        // Create and shuffle card pairs
+        function createCardPairs() {
+            // Create pairs of cards
+            const cardPairs = [];
+            [...cardEmojis, ...cardEmojis].forEach((emoji, index) => {
+                cardPairs.push({
+                    id: index + 1,
+                    value: emoji,
+                    isFlipped: false,
+                    isMatched: false,
+                    hasError: false
+                });
+            });
+            
+            // Shuffle cards using Fisher-Yates algorithm
+            for (let i = cardPairs.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [cardPairs[i], cardPairs[j]] = [cardPairs[j], cardPairs[i]];
+            }
+            
+            return cardPairs;
+        }
+        
+        // Render the game board with cards
+        function renderGameBoard() {
+            // Clear the game board
+            gameBoard.innerHTML = '';
+            
+            // Add cards to the game board
+            cards.forEach(card => {
+                const cardElement = document.createElement('div');
+                cardElement.className = 'memory-card';
+                cardElement.dataset.id = card.id;
+                
+                if (card.isFlipped) cardElement.classList.add('flipped');
+                if (card.isMatched) cardElement.classList.add('matched');
+                if (card.hasError) cardElement.classList.add('error');
+                
+                cardElement.innerHTML = `
+                    <div class="card-inner">
+                        <div class="card-back">?</div>
+                        <div class="card-front">${card.value}</div>
+                    </div>
+                `;
+                
+                cardElement.addEventListener('click', () => handleCardClick(card.id));
+                gameBoard.appendChild(cardElement);
+            });
+        }
+        
+        // Handle card click
+        function handleCardClick(id) {
+            // Start timer on first card click
+            if (!isTimerRunning) {
+                startTimer();
+            }
+            
+            // Get the card object
+            const card = cards.find(card => card.id === id);
+            
+            // Ignore clicks when:
+            // 1. Game is locked (during animations/checking)
+            // 2. Two cards are already flipped
+            // 3. Clicking an already flipped or matched card
+            if (
+                isLocked || 
+                flippedCards.length === 2 ||
+                card.isFlipped ||
+                card.isMatched
+            ) {
+                return;
+            }
+            
+            // Flip the card
+            card.isFlipped = true;
+            flippedCards.push(card);
+            
+            // Update UI
+            renderGameBoard();
+            
+            // Check for matches if two cards are flipped
+            if (flippedCards.length === 2) {
+                checkForMatch();
+            }
+        }
+        
+        // Check if two flipped cards match
+        function checkForMatch() {
+            moves++;
+            movesCounter.textContent = moves;
+            isLocked = true;
+            
+            const [firstCard, secondCard] = flippedCards;
+            
+            if (firstCard.value === secondCard.value) {
+                // Cards match
+                setTimeout(() => {
+                    firstCard.isMatched = true;
+                    secondCard.isMatched = true;
+                    firstCard.isFlipped = false;
+                    secondCard.isFlipped = false;
+                    matchedPairs++;
+                    pairsCounter.textContent = matchedPairs;
+                    flippedCards = [];
+                    isLocked = false;
+                    
+                    // Check for game completion
+                    if (matchedPairs === totalPairs) {
+                        gameComplete();
+                    }
+                    
+                    renderGameBoard();
+                }, 500);
+            } else {
+                // Cards don't match
+                setTimeout(() => {
+                    firstCard.hasError = true;
+                    secondCard.hasError = true;
+                    renderGameBoard();
+                    
+                    // Flip cards back after showing error
+                    setTimeout(() => {
+                        firstCard.isFlipped = false;
+                        secondCard.isFlipped = false;
+                        firstCard.hasError = false;
+                        secondCard.hasError = false;
+                        flippedCards = [];
+                        isLocked = false;
+                        renderGameBoard();
+                    }, 1000);
+                }, 500);
+            }
+        }
+        
+        // Handle game completion
+        function gameComplete() {
+            isGameComplete = true;
+            stopTimer();
+            
+            // Update victory modal
+            finalMovesDisplay.textContent = moves;
+            finalTimeDisplay.textContent = formatTime(timer);
+            
+            // Show victory modal after a short delay
+            setTimeout(() => {
+                victoryModal.classList.add('show');
+            }, 500);
+        }
+        
+        // Timer functions
+        function startTimer() {
+            isTimerRunning = true;
+            timerInterval = setInterval(() => {
+                timer++;
+                timerDisplay.textContent = formatTime(timer);
+            }, 1000);
+        }
+        
+        function stopTimer() {
+            isTimerRunning = false;
+            clearInterval(timerInterval);
+        }
+        
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return `${minutes.toString().padStart(2, '0')}:${remainingSeconds.toString().padStart(2, '0')}`;
+        }
+        
+        // Event listeners
+        restartButton.addEventListener('click', initializeGame);
+        playAgainButton.addEventListener('click', initializeGame);
+        
+        // Start the game
+        initializeGame();
+    </script>
+</body>
+</html>
